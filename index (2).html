@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>烈火英雄：拯救王奶奶 (30題豐富版)</title>
+    <style>
+        body { margin: 0; background: #1a1a1a; color: #fff; font-family: "Microsoft JhengHei", sans-serif; overflow: hidden; }
+        #ui-bar {
+            position: fixed; top: 0; left: 0; width: 100%; height: 120px;
+            background: #2c3e50; border-bottom: 4px solid #e74c3c;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10;
+        }
+        #question { font-size: 20px; font-weight: bold; color: #5dade2; text-align: center; line-height: 1.4; padding: 0 15px; }
+        #stats { margin-top: 8px; font-size: 18px; }
+        #hp { color: #ff4757; margin-right: 20px; }
+        #level-tag { color: #f1c40f; font-weight: bold; }
+        canvas { display: block; background: #000; }
+        #overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.95); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 100;
+        }
+        .msg-box { background: rgba(255,255,255,0.1); padding: 25px; border-radius: 15px; margin-bottom: 20px; text-align: center; width: 85%; max-width: 500px; line-height: 1.6; }
+        .btn {
+            padding: 15px 70px; font-size: 32px; background: #e67e22; color: white;
+            border: 4px solid #fff; border-radius: 60px; cursor: pointer; font-weight: bold;
+        }
+        .btn:hover { background: #d35400; transform: scale(1.05); }
+    </style>
+</head>
+<body>
+
+    <div id="ui-bar">
+        <div id="question">🚒 救火英雄，準備好接受挑戰了嗎？</div>
+        <div id="stats">
+            <span id="level-tag">第 1 關</span> | 
+            <span id="hp">HP: ⭐⭐⭐⭐⭐</span>
+            <span id="score">Score: 0</span>
+        </div>
+    </div>
+
+    <div id="overlay">
+        <h1 id="m-title" style="color:#e74c3c; font-size: 45px; margin-bottom: 10px;">🔥 烈火英雄</h1>
+        <div id="m-msg" class="msg-box">
+            王奶奶被困在三層火場中！<br><br>
+            ● <b>目標</b>：清除所有火球進入下一關（共三關）<br>
+            ● <b>操作</b>：滑鼠移動，鍵盤 <b>1, 2, 3</b> 答題<br>
+            ● <b>注意</b>：答錯或被火撞到都會扣除無敵星星
+        </div>
+        <button id="startBtn" class="btn">出動救援！</button>
+    </div>
+
+    <canvas id="c"></canvas>
+
+<script>
+    const c = document.getElementById("c");
+    const ctx = c.getContext("2d");
+    const startBtn = document.getElementById("startBtn");
+    const overlay = document.getElementById("overlay");
+
+    let W, H;
+    function resize() {
+        W = c.width = window.innerWidth;
+        H = c.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // ================= 核心狀態 =================
+    let game = false, hp = 5, score = 0, level = 1, hitCD = 0;
+    let player = { x: 0, y: 0 }, grandma = { x: 0, y: 160 };
+
+    // ================= 豐富題庫 (32題) =================
+    const masterBank = [
+        "預防近視，讀書每30分鐘應休息多久？|5分鐘|10分鐘|不需要休息|1",
+        "下列哪種食物含有豐富的維生素C？|炸雞|芭樂|白飯|1",
+        "正確洗手「內外夾弓大立腕」的『大』是指？|大拇指|大班|大聲說好|0",
+        "預防蛀牙應避免攝取過多哪種食物？|蔬菜|含糖飲料|開水|1",
+        "運動前最重要的是什麼？|穿名牌鞋|熱身運動|吃大餐|1",
+        "書桌的最佳燈光位置應在？|前方斜對側|正後方|正下方|0",
+        "口渴時最好的選擇是？|冰奶茶|白開水|運動飲料|1",
+        "睡眠不足會影響什麼？|身高發育與記憶力|指甲長度|衣服顏色|0",
+        "發現同學受傷流血，應該先？|大聲哭泣|報告老師並壓迫止血|跑回家|1",
+        "預防登革熱要清除什麼？|積水容器|課本|灰塵|0",
+        "哪種行為會傷害聽力？|聽輕音樂|大聲戴耳機很久|洗耳朵|1",
+        "正確的坐姿應該？|駝背趴著|背部挺直腳著地|翹二郎腿|1",
+        "為了腸道健康應多吃什麼？|肉類|高纖維蔬果|冰棒|1",
+        "流鼻血時應如何處理？|頭往後仰|低頭捏住鼻翼|用力擤鼻涕|1",
+        "下課時間應該多做什麼？|看螢幕|望遠凝視或伸展|趕快寫功課|1",
+        "哪種食物是優質蛋白質來源？|豆腐|薯條|可樂|0",
+        "預防腸病毒最有效的方法？|勤洗手|不洗澡|戴帽子|0",
+        "使用公筷母匙是為了預防？|感冒|傳染病|浪費糧食|1",
+        "每天建議睡足幾小時？|3小時|8-10小時|15小時|1",
+        "燙傷處理口訣第一步是？|脫|沖|蓋|1",
+        "哪種水果維生素A豐富對眼睛好？|紅蘿蔔|西瓜|荔枝|0",
+        "吃東西細嚼慢嚥是為了？|怕燙到|幫助消化|練習說話|1",
+        "運動後不應該馬上做什麼？|大量喝冰水|拉筋|休息|0",
+        "看電視的距離至少應保持？|10公分|3公尺以上|越近越好|1",
+        "哪種行為對牙齒好？|睡前刷牙|每天吃糖|喝酸梅湯|0",
+        "為什麼要天天五蔬果？|變聰明|維持身體機能與免疫力|比較貴|1",
+        "預防感冒應養成什麼習慣？|不睡覺|勤洗手、多喝水|吹冷風|1",
+        "早餐應包含哪類營養？|只有糖果|全榖雜糧與奶蛋蔬果|不吃早餐|1",
+        "垃圾分類是為了？|好玩|環境資源回收|浪費時間|1",
+        "咳嗽或打噴嚏時應？|對著別人|遮住口鼻|不理它|1",
+        "書包重量不應超過體重的？|10%|50%|80%|0",
+        "發現火災第一時間應？|拿相機拍照|大聲呼救並尋求逃生|躲在櫃子裡|1"
+    ];
+
+    let currentBank = [];
+    function shuffleBank() {
+        currentBank = [...masterBank].sort(() => Math.random() - 0.5);
+    }
+
+    // ================= 火球類 =================
+    let fires = [];
+    class Fire {
+        constructor() {
+            this.x = Math.random() * W;
+            this.y = Math.random() * (H - 350) + 250;
+        }
+        draw() {
+            ctx.font = "38px Arial";
+            ctx.fillText("🔥", this.x - 18, this.y + 15);
+        }
+    }
+
+    function spawnFires() {
+        fires = [];
+        let count = level === 1 ? 6 : (level === 2 ? 9 : 12);
+        for (let i = 0; i < count; i++) fires.push(new Fire());
+    }
+
+    // ================= 題目處理 =================
+    let currentQ;
+    function nextQ() {
+        if (currentBank.length === 0) shuffleBank(); // 抽完就重整
+        let raw = currentBank.pop();
+        let p = raw.split("|");
+        currentQ = { q: p[0], a: [p[1], p[2], p[3]], c: +p[4] };
+        
+        document.getElementById("question").innerText = 
+            `Q: ${currentQ.q}\n(1)${currentQ.a[0]} (2)${currentQ.a[1]} (3)${currentQ.a[2]}`;
+    }
+
+    // ================= 遊戲邏輯 =================
+    function triggerNextLevel() {
+        if (level < 3) {
+            level++;
+            game = false;
+            overlay.style.display = "flex";
+            document.getElementById("m-title").innerText = "🎊 挺進下一關！";
+            document.getElementById("m-msg").innerHTML = `第 ${level-1} 關成功熄滅火焰！<br>王奶奶還在更高樓層，快追上去！`;
+            startBtn.innerText = "出發！";
+            document.getElementById("level-tag").innerText = `第 ${level} 關`;
+        } else {
+            endGame("🏆 救火傳奇", "三關全破！王奶奶平安脫困，你是真正的英雄！");
+        }
+    }
+
+    function endGame(title, msg) {
+        game = false;
+        overlay.style.display = "flex";
+        document.getElementById("m-title").innerText = title;
+        document.getElementById("m-msg").innerHTML = `${msg}<br>最終得分：${score}`;
+        startBtn.innerText = "重新開始";
+        startBtn.onclick = () => location.reload();
+    }
+
+    startBtn.onclick = () => {
+        overlay.style.display = "none";
+        grandma.x = W / 2 - 22;
+        if (level === 1) shuffleBank();
+        game = true;
+        spawnFires();
+        nextQ();
+        loop();
+    };
+
+    window.onmousemove = e => { player.x = e.clientX; player.y = e.clientY; };
+
+    window.onkeydown = e => {
+        if (!game || !currentQ) return;
+        if (["1", "2", "3"].includes(e.key)) {
+            let a = +e.key - 1;
+            if (a === currentQ.c) {
+                score += 150;
+                if (fires.length > 0) fires.pop();
+                if (fires.length === 0) triggerNextLevel();
+                else nextQ();
+            } else {
+                hp--;
+                if (hp <= 0) endGame("💀 救援失敗", "無敵星星消失了，回醫院休息吧...");
+            }
+        }
+    };
+
+    function loop() {
+        if (!game) return;
+        ctx.fillStyle = "rgba(0,0,0,0.35)";
+        ctx.fillRect(0, 0, W, H);
+
+        ctx.font = "50px Arial";
+        ctx.fillText("👵", grandma.x, grandma.y);
+        ctx.fillText("👨‍🚒", player.x - 25, player.y + 25);
+
+        let speed = 1.1 + (level * 0.35); // 速度隨關卡增加
+
+        for (let i = fires.length - 1; i >= 0; i--) {
+            let f = fires[i];
+            let dx = player.x - f.x, dy = player.y - f.y;
+            let d = Math.hypot(dx, dy);
+
+            if (d > 0) {
+                f.x += dx / d * speed;
+                f.y += dy / d * speed;
+            }
+            f.draw();
+
+            if (d < 35 && hitCD <= 0) {
+                hp--;
+                hitCD = 45;
+                if (hp <= 0) endGame("💀 體力耗盡", "你在火場中受傷過重。");
+            }
+        }
+        if (hitCD > 0) hitCD--;
+
+        document.getElementById("hp").innerText = "HP: " + "⭐".repeat(Math.max(0, hp));
+        document.getElementById("score").innerText = "Score: " + score;
+        requestAnimationFrame(loop);
+    }
+</script>
+</body>
+</html>
